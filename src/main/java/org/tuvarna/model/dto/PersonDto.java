@@ -1,4 +1,4 @@
-package org.tuvarna.model.entity;
+package org.tuvarna.model.dto;
 
 public record PersonDto(Long id) {
 }

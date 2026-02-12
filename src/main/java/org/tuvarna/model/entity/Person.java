@@ -1,8 +1,9 @@
-package org.tuvarna.entity;
+package org.tuvarna.model.entity;
 
 import org.neo4j.ogm.annotation.Id;
 import org.neo4j.ogm.annotation.NodeEntity;
 import org.neo4j.ogm.annotation.Relationship;
+import org.tuvarna.model.relationship.FriendRequest;
 
 import java.util.List;
 
@@ -11,21 +12,21 @@ public class Person {
 
     @Id
     public Long userId;
+
+    @Relationship(value = "FRIEND_OF", direction = Relationship.Direction.UNDIRECTED)
     public List<Person> friends;
-    @Relationship
-    public List<Person> incomingRequesters;
-    public List<Person> outgoingRequesters;
+
+    @Relationship(value = "BLOCKED", direction = Relationship.Direction.OUTGOING)
     public List<Person> blacklistedUsers;
 
-    public Person() {
-    }
+    @Relationship(value = "REQUESTED_FRIENDSHIP", direction = Relationship.Direction.INCOMING)
+    public List<FriendRequest> incomingRequests;
 
-    public Person(long userId, List<Person> friends, List<Person> incomingRequesters, List<Person> outgoingRequesters, List<Person> blacklistedUsers) {
-        this.userId = userId;
-        this.friends = friends;
-        this.incomingRequesters = incomingRequesters;
-        this.outgoingRequesters = outgoingRequesters;
-        this.blacklistedUsers = blacklistedUsers;
+    @Relationship(value = "REQUESTED_FRIENDSHIP", direction = Relationship.Direction.OUTGOING)
+    public List<FriendRequest> outgoingRequests;
+
+
+    public Person() {
     }
 
 }
