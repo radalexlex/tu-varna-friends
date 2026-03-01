@@ -23,20 +23,21 @@ public class People {
 
     private static <T> List<T> toList(Iterable<T> iterable) {
         List<T> list = new ArrayList<>();
-        iterable.forEach(list::add);
+        if (iterable != null) {
+            iterable.forEach(list::add);
+        }
         return list;
     }
 
     private static List<FriendRequestDto> fillDto(Iterable<FriendRequest> iterable) {
         List<FriendRequestDto> list = new ArrayList<>();
+        if (iterable == null) return list;
 
-        while (iterable.iterator().hasNext()) {
-            FriendRequest r = iterable.iterator().next();
+        for (FriendRequest r : iterable) {
             list.add(new FriendRequestDto(
                     r.personFrom.userId,
                     r.personTo.userId));
         }
-
         return list;
     }
 
