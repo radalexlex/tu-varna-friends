@@ -5,7 +5,11 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.tuvarna.model.dto.FriendRequestDto;
+import org.tuvarna.model.dto.PersonDto;
 import org.tuvarna.repository.People;
+
+import java.util.List;
 
 @Path("/people")
 @Produces(MediaType.APPLICATION_JSON)
@@ -17,191 +21,293 @@ public class PersonResource {
     @Inject
     People people;
 
+    @POST
+    @Path("/create")
+    public boolean createUser(CreateUserRequest request) {
+
+        if (request == null
+                || request.name == null
+                || request.name.isBlank()
+                || request.facultyNumber == 0) {
+            throw new BadRequestException("Invalid user data.");
+        }
+
+        try {
+            return people.createUser(request.userId, request.name, request.facultyNumber);
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    "Failed to create user.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @PUT
+    @Path("/{userId}/name")
+    public boolean updateName(@PathParam("userId") long userId,
+                              UpdateNameRequest request) {
+
+        if (request == null || request.newName == null || request.newName.isBlank()) {
+            throw new BadRequestException("Invalid name.");
+        }
+
+        try {
+            return people.updateName(userId, request.newName);
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    "Failed to update name.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
     @GET
-    @Path("{userId}/friends/{page}")
-    public Response getFriendsOfPerson(
+    @Path("{userId}/search/{page}")
+    public List<PersonDto> searchPeople(
             @PathParam("userId") long userId,
-            @PathParam("page") int page) {
+            @PathParam("page") int page,
+            @QueryParam("query") String query) {
 
         if (page < 0) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Page index cannot be negative.")
-                    .build();
+            throw new BadRequestException("Page index cannot be negative.");
+        }
+
+        if (query == null || query.isBlank()) {
+            throw new BadRequestException("Query must not be empty.");
         }
 
         int skip = page * PAGE_SIZE;
 
         try {
-            return Response.ok(
-                    people.getFriendsForUser(userId, skip, PAGE_SIZE)
-            ).build();
+            return people.searchPeople(userId, query, skip, PAGE_SIZE);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to search users.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @GET
+    @Path("{userId}/friends/{page}")
+    public List<PersonDto> getFriendsOfPerson(
+            @PathParam("userId") long userId,
+            @PathParam("page") int page) {
+
+        if (page < 0) {
+            throw new BadRequestException("Page index cannot be negative.");
+        }
+
+        int skip = page * PAGE_SIZE;
+
+        try {
+            return people.getFriendsForUser(userId, skip, PAGE_SIZE);
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    "Failed to fetch friends.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    @GET
+    @Path("{userId}/friends-all")
+    public List<PersonDto> getAllFriendsOfPerson(
+            @PathParam("userId") long userId) {
+
+        try {
+            return people.getAllFriendsForUser(userId);
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    "Failed to fetch all friends.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @GET
     @Path("{userA}/{userB}/common-friends/{page}")
-    public Response getCommonABFriends(
+    public List<PersonDto> getCommonABFriends(
             @PathParam("userA") long userA,
             @PathParam("userB") long userB,
             @PathParam("page") int page) {
 
         if (page < 0) {
-            return Response.status(Response.Status.BAD_REQUEST).build();
+            throw new BadRequestException("Page index cannot be negative.");
         }
 
         int skip = page * PAGE_SIZE;
 
         try {
-            return Response.ok(
-                    people.getCommonFriends(userA, userB, skip, PAGE_SIZE)
-            ).build();
+            return people.getCommonFriends(userA, userB, skip, PAGE_SIZE);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to fetch common friends.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @GET
     @Path("{userId}/incoming-requests/{page}")
-    public Response getIncomingRequests(
+    public List<FriendRequestDto> getIncomingRequests(
             @PathParam("userId") long userId,
             @PathParam("page") int page) {
 
         if (page < 0) {
-            return Response.status(Response.Status.BAD_REQUEST).build();
+            throw new BadRequestException("Page index cannot be negative.");
         }
 
         int skip = page * PAGE_SIZE;
 
         try {
-            return Response.ok(
-                    people.getIncomingRequests(userId, skip, PAGE_SIZE)
-            ).build();
+            return people.getIncomingRequests(userId, skip, PAGE_SIZE);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to fetch incoming requests.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @GET
     @Path("{userId}/outgoing-requests/{page}")
-    public Response getOutgoingRequests(
+    public List<FriendRequestDto> getOutgoingRequests(
             @PathParam("userId") long userId,
             @PathParam("page") int page) {
 
         if (page < 0) {
-            return Response.status(Response.Status.BAD_REQUEST).build();
+            throw new BadRequestException("Page index cannot be negative.");
         }
 
         int skip = page * PAGE_SIZE;
 
         try {
-            return Response.ok(
-                    people.getOutgoingRequests(userId, skip, PAGE_SIZE)
-            ).build();
+            return people.getOutgoingRequests(userId, skip, PAGE_SIZE);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to fetch outgoing requests.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @GET
     @Path("{userId}/blocked/{page}")
-    public Response getBlockedUsers(
+    public List<PersonDto> getBlockedUsers(
             @PathParam("userId") long userId,
             @PathParam("page") int page) {
 
         if (page < 0) {
-            return Response.status(Response.Status.BAD_REQUEST).build();
+            throw new BadRequestException("Page index cannot be negative.");
         }
 
         int skip = page * PAGE_SIZE;
 
         try {
-            return Response.ok(
-                    people.getBlockedUsersPerUser(userId, skip, PAGE_SIZE)
-            ).build();
+            return people.getBlockedUsersPerUser(userId, skip, PAGE_SIZE);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to fetch blocked users.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @POST
     @Path("/send-request")
-    public Response sendFriendRequest(UserAction action) {
+    public boolean sendFriendRequest(UserAction action) {
 
         if (action.userA == action.userB) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Cannot send friend request to self.")
-                    .build();
+            throw new BadRequestException("Cannot send friend request to self.");
         }
 
         try {
-            return Response.ok(people.createFriendshipRequest(action.userA, action.userB)).build();
+            return people.createFriendshipRequest(action.userA, action.userB);
         } catch (BadRequestException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(e.getMessage())
-                    .build();
+            throw e;
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to send friend request.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @POST
     @Path("/remove-request")
-    public Response removeFriendRequest(UserAction action) {
+    public boolean removeFriendRequest(UserAction action) {
+
         try {
-            return Response.ok(people.deleteRequest(action.userA, action.userB)).build();
+            return people.deleteRequest(action.userA, action.userB);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to remove friend request.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @POST
     @Path("/delete-friend")
-    public Response deleteFriend(UserAction action) {
+    public boolean deleteFriend(UserAction action) {
+
         try {
-            return Response.ok(people.deleteFriend(action.userA, action.userB)).build();
+            return people.deleteFriend(action.userA, action.userB);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to delete friend.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @POST
     @Path("/add-blacklist")
-    public Response addUserToBlacklist(BlockAction action) {
+    public boolean addUserToBlacklist(BlockAction action) {
 
         if (action.blocker == action.blocked) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Cannot block yourself.")
-                    .build();
+            throw new BadRequestException("Cannot block yourself.");
         }
 
         try {
-            return Response.ok(people.blockUser(action.blocker, action.blocked)).build();
+            return people.blockUser(action.blocker, action.blocked);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to block user.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
     }
 
     @GET
     @Path("{userA}/{userB}/is-blocked")
-    public Response checkIfBlocked(
+    public boolean checkIfBlocked(
             @PathParam("userA") long userA,
             @PathParam("userB") long userB) {
 
         if (userA == userB) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("Users must be different.")
-                    .build();
+            throw new BadRequestException("Users must be different.");
         }
 
         try {
-            return Response.ok(
-                    people.checkIfBlocked(userA, userB)
-            ).build();
+            return people.checkIfBlocked(userA, userB);
         } catch (Exception e) {
-            return Response.serverError().build();
+            throw new WebApplicationException(
+                    "Failed to check block status.",
+                    Response.Status.INTERNAL_SERVER_ERROR
+            );
         }
+    }
+
+    public static class CreateUserRequest {
+        public long userId;
+        public String name;
+        public long facultyNumber;
+    }
+
+    public static class UpdateNameRequest {
+        public String newName;
     }
 
     public static class UserAction {
