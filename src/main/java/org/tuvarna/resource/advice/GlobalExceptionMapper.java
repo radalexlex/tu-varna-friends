@@ -1,14 +1,12 @@
 package org.tuvarna.resource.advice;
 
-import jakarta.ws.rs.BadRequestException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.ConstraintViolationException;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 

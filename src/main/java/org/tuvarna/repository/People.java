@@ -9,11 +9,12 @@ import org.neo4j.ogm.session.SessionFactory;
 import org.neo4j.ogm.transaction.Transaction;
 import org.tuvarna.model.dto.FriendRequestDto;
 import org.tuvarna.model.dto.PersonDto;
-import org.tuvarna.model.entity.Person;
 import org.tuvarna.model.relationship.FriendRequest;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class People {
@@ -43,7 +44,7 @@ public class People {
 
     public boolean createUser(long userId, String name, long facultyNumber) {
         Session session = sessionFactory.openSession();
-        try(Transaction tx = session.beginTransaction()) {
+        try (Transaction tx = session.beginTransaction()) {
 
             String createCypher = """
                     CREATE (a:Person {id: $userId, name: $name, facultyNumber: $facultyNumber})
@@ -56,11 +57,11 @@ public class People {
 
             tx.commit();
 
-            if(createResult.iterator().hasNext()) {
+            if (createResult.iterator().hasNext()) {
                 return true;
 
             } else {
-                throw new BadRequestException("Could not create person {"+userId+" "+facultyNumber+" "+name+"}");
+                throw new BadRequestException("Could not create person {" + userId + " " + facultyNumber + " " + name + "}");
             }
         } finally {
             session.clear();
@@ -84,10 +85,10 @@ public class People {
 
             tx.commit();
 
-            if(updateResult.iterator().hasNext()) {
+            if (updateResult.iterator().hasNext()) {
                 return true;
             } else {
-                throw new BadRequestException("Could not update person {"+userId+" "+newName+"}");
+                throw new BadRequestException("Could not update person {" + userId + " " + newName + "}");
             }
 
         } finally {
@@ -138,26 +139,26 @@ public class People {
             int skip,
             int limit) {
         Session session = sessionFactory.openSession();
-        try(Transaction tx = session.beginTransaction()) {
+        try (Transaction tx = session.beginTransaction()) {
 
             String cypher = """
                     CALL db.index.fulltext.queryNodes("personSearchIndex", $query)
                     YIELD node AS p, score
                     WITH p, score
                     LIMIT 200
-                   
+                    
                     MATCH (me:Person {id: $requestingUserId})
                     WHERE p.id <> $requestingUserId
                       AND NOT EXISTS { (me)-[:BLOCKED]->(p) }
                       AND NOT EXISTS { (p)-[:BLOCKED]->(me) }
-                   
+                    
                     OPTIONAL MATCH (me)-[:FRIEND_OF]-(p)
                     WITH me, p, score,
                          CASE WHEN COUNT(p) > 0 THEN 1 ELSE 0 END AS isFriend
-                   
+                    
                     OPTIONAL MATCH (me)-[:FRIEND_OF]-(common)-[:FRIEND_OF]-(p)
                     WITH p, score, isFriend, COUNT(common) AS mutualFriends
-                   
+                    
                     RETURN p.id AS id
                     ORDER BY
                         isFriend DESC,
@@ -419,9 +420,9 @@ public class People {
         try {
 
             Result result = session.query("""
-                    MATCH (:Person {id: $blocking})-[:BLOCKED]->(:Person {id: $blocked})
-                    RETURN COUNT(*) AS cnt
-                    """,
+                            MATCH (:Person {id: $blocking})-[:BLOCKED]->(:Person {id: $blocked})
+                            RETURN COUNT(*) AS cnt
+                            """,
                     Map.of("blocking", userBlocking, "blocked", userBlocked));
 
             if (!result.iterator().hasNext()) {
