@@ -10,14 +10,19 @@ public class V001__PersonSearchIndexMigration implements JavaBasedMigration {
     public void apply(MigrationContext context) {
         Session session = context.getSession();
         try (Transaction tx = session.beginTransaction()) {
-
+            //TODO: Adapt for latest PersonDTO that User-service would use
             tx.run("""
                     CREATE FULLTEXT INDEX personSearchIndex
                     IF NOT EXISTS
                     FOR (p:Person)
-                    ON EACH [p.name, p.facultyNumber]
+                    ON EACH [
+                        p.fullName,
+                        p.facultyNumber,
+                        p.specialty,
+                        p.field,
+                        p.form
+                    ]
                     """);
-
             tx.commit();
         }
     }

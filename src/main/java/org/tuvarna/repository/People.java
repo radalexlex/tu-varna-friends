@@ -7,9 +7,10 @@ import org.neo4j.ogm.model.Result;
 import org.neo4j.ogm.session.Session;
 import org.neo4j.ogm.session.SessionFactory;
 import org.neo4j.ogm.transaction.Transaction;
+import org.tuvarna.model.dto.ContactHydratedDto;
+import org.tuvarna.model.dto.ContactSummaryDto;
 import org.tuvarna.model.dto.FriendRequestDto;
-import org.tuvarna.model.dto.PersonDto;
-import org.tuvarna.model.relationship.FriendRequest;
+import org.tuvarna.model.dto.ProfileDto;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,71 +31,105 @@ public class People {
         return list;
     }
 
-    private static List<FriendRequestDto> fillDto(Iterable<FriendRequest> iterable) {
-        List<FriendRequestDto> list = new ArrayList<>();
-        if (iterable == null) return list;
-
-        for (FriendRequest r : iterable) {
-            list.add(new FriendRequestDto(
-                    r.personFrom.userId,
-                    r.personTo.userId));
-        }
-        return list;
-    }
-
-    public boolean createUser(long userId, String name, long facultyNumber) {
-        Session session = sessionFactory.openSession();
-        try (Transaction tx = session.beginTransaction()) {
-
-            String createCypher = """
-                    CREATE (a:Person {id: $userId, name: $name, facultyNumber: $facultyNumber})
-                    RETURN a
-                    """;
-
-            Result createResult = session.query(
-                    createCypher, Map.of("userId", userId, "name", name, "facultyNumber", facultyNumber)
-            );
-
-            tx.commit();
-
-            if (createResult.iterator().hasNext()) {
-                return true;
-
-            } else {
-                throw new BadRequestException("Could not create person {" + userId + " " + facultyNumber + " " + name + "}");
-            }
-        } finally {
-            session.clear();
-        }
-    }
-
-    public boolean updateName(long userId, String newName) {
+    public boolean saveOrUpdate(ProfileDto profile) {
         Session session = sessionFactory.openSession();
         try (Transaction tx = session.beginTransaction()) {
 
             String cypher = """
-                    MATCH (a:Person {id: $userId})
-                    SET a.name = $name
-                    RETURN a
-                    """;
+            MERGE (p:Person {id: $userId})
+            SET p.facultyNumber = $facultyNumber,
+                p.name = $name,
+                p.surname = $surname,
+                p.fullName = $name + ' ' + $surname,
+                p.keyToImage = $urlImage,
+                p.specialty = $specialty,
+                p.field = $field,
+                p.form = $form,
+                p.country = $country,
+            RETURN p
+        """;
 
-            Result updateResult = session.query(
-                    cypher, Map.of(
-                            "userId", userId,
-                            "name", newName));
+            Result result = session.query(
+                    cypher,
+                    Map.ofEntries(
+                            Map.entry("userId", profile.getUserId()),
+                            Map.entry("facultyNumber", profile.getFacultyNumber()),
+                            Map.entry("name", profile.getName()),
+                            Map.entry("surname", profile.getSurname()),
+                            Map.entry("urlImage", profile.getUrlImage()),
+                            Map.entry("phoneNumber", profile.getPhoneNumber()),
+                            Map.entry("specialty", profile.getSpecialty()),
+                            Map.entry("field", profile.getField()),
+                            Map.entry("form", profile.getForm()),
+                            Map.entry("country", profile.getCountry()),
+                            Map.entry("workplace", profile.getWorkplace()),
+                            Map.entry("position", profile.getPosition())
+                    )
+            );
+
 
             tx.commit();
-
-            if (updateResult.iterator().hasNext()) {
-                return true;
-            } else {
-                throw new BadRequestException("Could not update person {" + userId + " " + newName + "}");
-            }
+            return result.iterator().hasNext();
 
         } finally {
             session.clear();
         }
     }
+
+    public List<String> getSpecialties(int limit) {
+        Session session = sessionFactory.openSession();
+
+        try {
+            String cypher = """
+            MATCH (p:Person)
+            WHERE p.specialty IS NOT NULL
+            RETURN DISTINCT p.specialty AS value
+            ORDER BY value
+            LIMIT $limit
+        """;
+
+            Result result = session.query(cypher, Map.of("limit", limit));
+
+            List<String> values = new ArrayList<>();
+
+            while (result.iterator().hasNext()) {
+                values.add(result.iterator().next().get("value").toString());
+            }
+
+            return values;
+
+        } finally {
+            session.clear();
+        }
+    }
+
+    public List<String> getFields(int limit) {
+        Session session = sessionFactory.openSession();
+
+        try {
+            String cypher = """
+            MATCH (p:Person)
+            WHERE p.field IS NOT NULL
+            RETURN DISTINCT p.field AS value
+            ORDER BY value
+            LIMIT $limit
+        """;
+
+            Result result = session.query(cypher, Map.of("limit", limit));
+
+            List<String> values = new ArrayList<>();
+
+            while (result.iterator().hasNext()) {
+                values.add(result.iterator().next().get("value").toString());
+            }
+
+            return values;
+
+        } finally {
+            session.clear();
+        }
+    }
+
 
     public boolean createFriendshipRequest(long userA, long userB) {
         Session session = sessionFactory.openSession();
@@ -132,49 +167,57 @@ public class People {
             session.clear();
         }
     }
-
-    public List<PersonDto> searchPeople(
+    public List<ContactHydratedDto> searchPeople(
             long requestingUserId,
             String query,
             int skip,
             int limit) {
+
         Session session = sessionFactory.openSession();
-        try (Transaction tx = session.beginTransaction()) {
+        try {
 
             String cypher = """
-                    CALL db.index.fulltext.queryNodes("personSearchIndex", $query)
-                    YIELD node AS p, score
-                    WITH p, score
-                    LIMIT 200
-                    
-                    MATCH (me:Person {id: $requestingUserId})
-                    WHERE p.id <> $requestingUserId
-                      AND NOT EXISTS { (me)-[:BLOCKED]->(p) }
-                      AND NOT EXISTS { (p)-[:BLOCKED]->(me) }
-                    
-                    OPTIONAL MATCH (me)-[:FRIEND_OF]-(p)
-                    WITH me, p, score,
-                         CASE WHEN COUNT(p) > 0 THEN 1 ELSE 0 END AS isFriend
-                    
-                    OPTIONAL MATCH (me)-[:FRIEND_OF]-(common)-[:FRIEND_OF]-(p)
-                    WITH p, score, isFriend, COUNT(common) AS mutualFriends
-                    
-                    RETURN p.id AS id
-                    ORDER BY
-                        isFriend DESC,
-                        mutualFriends DESC,
-                        score DESC
-                    SKIP $skip LIMIT $limit
-                    """;
+            CALL db.index.fulltext.queryNodes("personSearchIndex", $query)
+            YIELD node AS p, score
+            WITH p, score
+            LIMIT 200
 
-            Iterable<PersonDto> res = session.queryDto(
-                    cypher,
-                    Map.of("query", query,
-                            "requestingUserId", requestingUserId,
-                            "skip", skip,
-                            "limit", limit),
+            MATCH (me:Person {id: $requestingUserId})
+            WHERE p.id <> $requestingUserId
+              AND NOT EXISTS { (me)-[:BLOCKED]->(p) }
+              AND NOT EXISTS { (p)-[:BLOCKED]->(me) }
 
-                    PersonDto.class);
+            OPTIONAL MATCH (me)-[f:FRIEND_OF]-(p)
+            WITH me, p, score, COUNT(f) > 0 AS isFriend
+
+            OPTIONAL MATCH (me)-[:FRIEND_OF]-(common)-[:FRIEND_OF]-(p)
+            WITH p, score, isFriend, COUNT(DISTINCT common) AS commonFriendCount
+
+            RETURN 
+                p.id AS userId,
+                p.keyToImage AS keyToImage,
+                p.fullName AS fullName,
+                isFriend,
+                commonFriendCount
+
+            ORDER BY 
+                isFriend DESC,
+                commonFriendCount DESC,
+                score DESC
+
+            SKIP $skip LIMIT $limit
+        """;
+
+            Iterable<ContactHydratedDto> res =
+                    session.queryDto(
+                            cypher,
+                            Map.of(
+                                    "query", query,
+                                    "requestingUserId", requestingUserId,
+                                    "skip", skip,
+                                    "limit", limit),
+                            ContactHydratedDto.class
+                    );
 
             return toList(res);
 
@@ -206,7 +249,7 @@ public class People {
         }
     }
 
-    public List<PersonDto> getCommonFriends(long userA,
+    public List<ContactSummaryDto> getCommonFriends(long userA,
                                             long userB,
                                             int skip,
                                             int limit) {
@@ -215,18 +258,21 @@ public class People {
 
             String cypher = """
                     MATCH (x:Person {id: $a})-[:FRIEND_OF]-(z:Person)-[:FRIEND_OF]-(y:Person {id: $b})
-                    RETURN z.id AS id
+                    RETURN
+                        z.id AS userId,
+                        z.keyToImage AS keyToImage,
+                        z.fullName AS fullName
                     SKIP $skip LIMIT $limit
                     """;
 
-            Iterable<PersonDto> res =
+            Iterable<ContactSummaryDto> res =
                     session.queryDto(
                             cypher,
                             Map.of("a", userA,
                                     "b", userB,
                                     "skip", skip,
                                     "limit", limit),
-                            PersonDto.class);
+                            ContactSummaryDto.class);
 
             return toList(res);
 
@@ -312,23 +358,29 @@ public class People {
         }
     }
 
-    public List<PersonDto> getFriendsForUser(long userId, int skip, int limit) {
+    public List<ContactSummaryDto> getFriendsForUser(long userId, int skip, int limit) {
+
         Session session = sessionFactory.openSession();
         try {
-            String cypher = """
-                    MATCH (x:Person {id: $a})-[:FRIEND_OF]-(y:Person)
-                    RETURN y.id AS id
-                    SKIP $skip LIMIT $limit
-                    """;
 
-            Iterable<PersonDto> res =
+            String cypher = """
+            MATCH (x:Person {id: $a})-[:FRIEND_OF]-(y:Person)
+            RETURN
+                y.id AS userId,
+                y.keyToImage AS keyToImage,
+                y.fullName AS fullName
+            SKIP $skip LIMIT $limit
+        """;
+
+            Iterable<ContactSummaryDto> res =
                     session.queryDto(
                             cypher,
                             Map.of(
                                     "a", userId,
                                     "skip", skip,
                                     "limit", limit),
-                            PersonDto.class);
+                            ContactSummaryDto.class
+                    );
 
             return toList(res);
 
@@ -337,19 +389,22 @@ public class People {
         }
     }
 
-    public List<PersonDto> getAllFriendsForUser(long userId) {
+    public List<ContactSummaryDto> getAllFriendsForUser(long userId) {
         Session session = sessionFactory.openSession();
         try {
             String cypher = """
                     MATCH (x:Person {id: $a})-[:FRIEND_OF]-(y:Person)
-                    RETURN y.id AS id
+                    RETURN
+                        y.id AS userId,
+                        y.keyToImage AS keyToImage,
+                        y.fullName AS fullName
                     """;
 
-            Iterable<PersonDto> res =
+            Iterable<ContactSummaryDto> res =
                     session.queryDto(
                             cypher,
                             Map.of("a", userId),
-                            PersonDto.class);
+                            ContactSummaryDto.class);
 
             return toList(res);
 
@@ -389,7 +444,7 @@ public class People {
         }
     }
 
-    public List<PersonDto> getBlockedUsersPerUser(long userId, int skip, int limit) {
+    public List<ContactSummaryDto> getBlockedUsersPerUser(long userId, int skip, int limit) {
         Session session = sessionFactory.openSession();
 
         try {
@@ -398,14 +453,14 @@ public class People {
                     RETURN b.id AS id
                     SKIP $skip LIMIT $limit
                     """;
-            Iterable<PersonDto> res =
+            Iterable<ContactSummaryDto> res =
                     session.queryDto(
                             cypher,
                             Map.of(
                                     "id", userId,
                                     "skip", skip,
                                     "limit", limit),
-                            PersonDto.class);
+                            ContactSummaryDto.class);
 
             return toList(res);
 
@@ -437,3 +492,17 @@ public class People {
     }
 
 }
+
+
+
+//    private static List<FriendRequestDto> fillDto(Iterable<FriendRequest> iterable) {
+//        List<FriendRequestDto> list = new ArrayList<>();
+//        if (iterable == null) return list;
+//
+//        for (FriendRequest r : iterable) {
+//            list.add(new FriendRequestDto(
+//                    r.personFrom.userId,
+//                    r.personTo.userId));
+//        }
+//        return list;
+//    }

@@ -13,9 +13,9 @@ public class V002__IdPersonConstraint implements JavaBasedMigration {
         try (Transaction tx = session.beginTransaction()) {
 
             tx.run("""
-                    CREATE CONSTRAINT person_id IF NOT EXISTS
-                    FOR (p:Person) REQUIRE p.id IS UNIQUE;
-                    """);
+                CREATE CONSTRAINT person_id IF NOT EXISTS
+                FOR (p:Person) REQUIRE p.id IS UNIQUE;
+            """);
 
             tx.commit();
         }

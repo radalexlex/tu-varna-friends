@@ -7,8 +7,10 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.tuvarna.model.dto.FriendRequestDto;
-import org.tuvarna.model.dto.PersonDto;
+import org.tuvarna.model.dto.ContactHydratedDto;
+import org.tuvarna.model.dto.ProfileDto;
 import org.tuvarna.repository.People;
 
 import java.util.List;
@@ -21,179 +23,125 @@ public class PersonResource {
     private static final int PAGE_SIZE = 15;
 
     @Inject
-    People people;
+    People service;
+
+    private int skip(int page) {
+        return page * PAGE_SIZE;
+    }
+
+    // ---------------- PROFILE ----------------
 
     @POST
-    @Path("/create")
-    public boolean createUser(@Valid CreateUserRequest request) {
-        return people.createUser(
-                request.userId,
-                request.name,
-                request.facultyNumber
-        );
+    public Response saveOrUpdate(ProfileDto dto) {
+        service.saveOrUpdateUser(dto);
+        return Response.ok().build();
     }
 
-    @PUT
-    @Path("/{userId}/name")
-    public boolean updateName(
+    // ---------------- SEARCH ----------------
+
+    @GET
+    @Path("/{userId}/search")
+    public List<ContactHydratedDto> search(
             @PathParam("userId") @Min(1) long userId,
-            @Valid UpdateNameRequest request) {
+            @QueryParam("q") @NotBlank String query,
+            @QueryParam("page") @DefaultValue("0") int page) {
 
-        return people.updateName(userId, request.newName);
+        return service.searchPeople(userId, query.trim(), skip(page), PAGE_SIZE);
+    }
+
+    // ---------------- FRIENDS ----------------
+
+    @GET
+    @Path("/{userId}/friends")
+    public List<PersonSummaryDto> friends(
+            @PathParam("userId") long userId,
+            @QueryParam("page") @DefaultValue("0") int page) {
+
+        return service.getFriends(userId, skip(page), PAGE_SIZE);
     }
 
     @GET
-    @Path("{userId}/search/{page}")
-    public List<PersonDto> searchPeople(
-            @PathParam("userId") @Min(1) long userId,
-            @PathParam("page") @Min(0) int page,
-            @QueryParam("query") @NotBlank String query) {
-
-        int skip = page * PAGE_SIZE;
-        return people.searchPeople(userId, query.trim(), skip, PAGE_SIZE);
+    @Path("/{userId}/friends/all")
+    public List<PersonSummaryDto> allFriends(@PathParam("userId") long userId) {
+        return service.getAllFriends(userId);
     }
 
     @GET
-    @Path("{userId}/friends/{page}")
-    public List<PersonDto> getFriendsOfPerson(
-            @PathParam("userId") @Min(1) long userId,
-            @PathParam("page") @Min(0) int page) {
+    @Path("/{a}/{b}/common-friends")
+    public List<PersonSummaryDto> commonFriends(
+            @PathParam("a") long a,
+            @PathParam("b") long b,
+            @QueryParam("page") @DefaultValue("0") int page) {
 
-        int skip = page * PAGE_SIZE;
-        return people.getFriendsForUser(userId, skip, PAGE_SIZE);
+        return service.getCommonFriends(a, b, skip(page), PAGE_SIZE);
+    }
+
+    // ---------------- REQUESTS ----------------
+
+    @GET
+    @Path("/{userId}/requests/incoming")
+    public List<FriendRequestDto> incoming(
+            @PathParam("userId") long userId,
+            @QueryParam("page") int page) {
+
+        return service.getIncomingRequests(userId, skip(page), PAGE_SIZE);
     }
 
     @GET
-    @Path("{userId}/friends-all")
-    public List<PersonDto> getAllFriendsOfPerson(
-            @PathParam("userId") @Min(1) long userId) {
+    @Path("/{userId}/requests/outgoing")
+    public List<FriendRequestDto> outgoing(
+            @PathParam("userId") long userId,
+            @QueryParam("page") int page) {
 
-        return people.getAllFriendsForUser(userId);
-    }
-
-    @GET
-    @Path("{userA}/{userB}/common-friends/{page}")
-    public List<PersonDto> getCommonABFriends(
-            @PathParam("userA") @Min(1) long userA,
-            @PathParam("userB") @Min(1) long userB,
-            @PathParam("page") @Min(0) int page) {
-
-        int skip = page * PAGE_SIZE;
-        return people.getCommonFriends(userA, userB, skip, PAGE_SIZE);
-    }
-
-    @GET
-    @Path("{userId}/incoming-requests/{page}")
-    public List<FriendRequestDto> getIncomingRequests(
-            @PathParam("userId") @Min(1) long userId,
-            @PathParam("page") @Min(0) int page) {
-
-        int skip = page * PAGE_SIZE;
-        return people.getIncomingRequests(userId, skip, PAGE_SIZE);
-    }
-
-    @GET
-    @Path("{userId}/outgoing-requests/{page}")
-    public List<FriendRequestDto> getOutgoingRequests(
-            @PathParam("userId") @Min(1) long userId,
-            @PathParam("page") @Min(0) int page) {
-
-        int skip = page * PAGE_SIZE;
-        return people.getOutgoingRequests(userId, skip, PAGE_SIZE);
-    }
-
-    @GET
-    @Path("{userId}/blocked/{page}")
-    public List<PersonDto> getBlockedUsers(
-            @PathParam("userId") @Min(1) long userId,
-            @PathParam("page") @Min(0) int page) {
-
-        int skip = page * PAGE_SIZE;
-        return people.getBlockedUsersPerUser(userId, skip, PAGE_SIZE);
+        return service.getOutgoingRequests(userId, skip(page), PAGE_SIZE);
     }
 
     @POST
-    @Path("/send-request")
-    public boolean sendFriendRequest(@Valid UserAction action) {
-
-        if (action.userA == action.userB) {
-            throw new BadRequestException("Cannot send friend request to self.");
-        }
-
-        return people.createFriendshipRequest(action.userA, action.userB);
+    @Path("/requests")
+    public Response sendRequest(@Valid UserAction action) {
+        service.sendFriendRequest(action);
+        return Response.ok().build();
     }
 
-    @POST
-    @Path("/remove-request")
-    public boolean removeFriendRequest(@Valid UserAction action) {
-        return people.deleteRequest(action.userA, action.userB);
+    @DELETE
+    @Path("/requests")
+    public Response removeRequest(@Valid UserAction action) {
+        service.removeRequest(action);
+        return Response.noContent().build();
     }
 
-    @POST
-    @Path("/delete-friend")
-    public boolean deleteFriend(@Valid UserAction action) {
-        return people.deleteFriend(action.userA, action.userB);
+    // ---------------- FRIENDSHIP ----------------
+
+    @DELETE
+    @Path("/friends")
+    public Response deleteFriend(@Valid UserAction action) {
+        service.deleteFriend(action);
+        return Response.noContent().build();
     }
 
+    // ---------------- BLOCK ----------------
+
     @POST
-    @Path("/add-blacklist")
-    public boolean addUserToBlacklist(@Valid BlockAction action) {
-
-        if (action.blocker == action.blocked) {
-            throw new BadRequestException("Cannot block yourself.");
-        }
-
-        return people.blockUser(action.blocker, action.blocked);
+    @Path("/blocks")
+    public Response block(@Valid BlockAction action) {
+        service.block(action);
+        return Response.ok().build();
     }
 
     @GET
-    @Path("{userA}/{userB}/is-blocked")
-    public boolean checkIfBlocked(
-            @PathParam("userA") @Min(1) long userA,
-            @PathParam("userB") @Min(1) long userB) {
-
-        if (userA == userB) {
-            throw new BadRequestException("Users must be different.");
-        }
-
-        return people.checkIfBlocked(userA, userB);
+    @Path("/{a}/{b}/blocked")
+    public boolean isBlocked(@PathParam("a") long a,
+                             @PathParam("b") long b) {
+        return service.isBlocked(a, b);
     }
 
-    // ===== DTOs with validation =====
+    public record UserAction(
+            @Min(1) long userA,
+            @Min(1) long userB
+    ) {}
 
-    public static class CreateUserRequest {
-
-        @Min(1)
-        public long userId;
-
-        @NotBlank
-        public String name;
-
-        @Min(1)
-        public long facultyNumber;
-    }
-
-    public static class UpdateNameRequest {
-
-        @NotBlank
-        public String newName;
-    }
-
-    public static class UserAction {
-
-        @Min(1)
-        public long userA;
-
-        @Min(1)
-        public long userB;
-    }
-
-    public static class BlockAction {
-
-        @Min(1)
-        public long blocker;
-
-        @Min(1)
-        public long blocked;
-    }
+    public record BlockAction(
+            @Min(1) long blocker,
+            @Min(1) long blocked
+    ) {}
 }
